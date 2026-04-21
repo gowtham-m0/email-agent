@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.claude/settings.local.json
+
+# secret files
+agent_state.json
+credentials.json
+.env
+token.json
+agent.db
