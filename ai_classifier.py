@@ -1,67 +1,92 @@
 import json
-from model import call_llm
+import concurrent.futures
+from model import call_llm, DistilledEmailClassifier
+from prompts import CLASSIFICATION_PROMPT
 
-def classify_email(subject: str, sender: str, snippet: str) -> dict:
-    """
-    Send email details to Groq and get back a classification.
-    Returns:
-    {
-        "category": "important | okay | unwanted",
-        "reason": "..." 
-    }
-    """
 
-    prompt = f"""You are an aggressive email classifier helping clean a cluttered inbox.
-        The priority is STORAGE — when in doubt, classify as UNWANTED.
+def classify_with_llm(subject: str, sender: str, snippet: str) -> dict:
+    subject = (subject or "").strip()
+    sender  = (sender  or "").strip()
+    snippet = (snippet or "").strip()
 
-        Email details:
-        - Sender: {sender}
-        - Subject: {subject}
-        - Preview: {snippet}
+    full_prompt = (
+        CLASSIFICATION_PROMPT
+        + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        + "NOW CLASSIFY THIS EMAIL:\n"
+        + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        + f"From: {sender.lower()}\n"
+        + f"Subject: {subject.lower()}\n"
+        + f"Preview: {snippet.lower()}\n"
+    )
 
-        Classification rules (be strict):
+    raw = call_llm(full_prompt).strip()
 
-        "important" → ONLY these:
-        - Bank transaction alerts (debit/credit/OTP)
-        - Personal emails from real people
-        - Account security alerts
-        - Bills, receipts, order confirmations
-        - Job offers directly addressed to the user
-        - Service disruption alerts
+    if "```" in raw:
+        raw = "\n".join(
+            line for line in raw.split("\n")
+            if not line.strip().startswith("```")
+        ).strip()
 
-        "unwanted" → ALL of these (be aggressive):
-        - Any newsletter, even if user subscribed
-        - Job board bulk emails (LinkedIn alerts, Naukri, Unstop)
-        - Course promotions (Simplilearn, edX, Coursera promos)
-        - Bank promotional offers (loans, credit cards, investments)
-        - Streak/gamification emails (Chess.com streaks etc.)
-        - Any email with discount codes or sale announcements
-        - Mutual fund newsletters
-        - Marketing from any company
+    json_line = None
+    for line in raw.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            json_line = stripped
+            break
 
-        "okay" → ONLY these:
-        - Hackathon announcements
-        - Community posts user likely wants (Reddit threads they follow)
-        - Direct notifications from platforms user actively uses
-        - Emails that don't fit important but are NOT bulk/automated
-
-        When in doubt between okay and unwanted → choose UNWANTED.
-        Storage is the priority.
-
-        Respond in this exact JSON format only:
-        {{
-        "category": "important|okay|unwanted",
-        "reason": "one short sentence"
-        }}"""
-
-    raw_response = call_llm(prompt).strip()
+    if not json_line:
+        try:
+            result = json.loads(raw)
+            if result.get("category") in ["important", "okay", "unwanted"]:
+                return result
+        except Exception:
+            pass
+        return {"category": "okay", "reason": "no json returned"}
 
     try:
-        result = json.loads(raw_response)
-    except json.JSONDecodeError:
-        result = {
-            "category": "okay",
-            "reason": f"Could not parse AI response, defaulting to 'okay'. Raw response: {raw_response}"
-        }
-        
-    return result
+        result = json.loads(json_line)
+        if result.get("category") not in ["important", "okay", "unwanted"]:
+            result["category"] = "okay"
+        return result
+    except Exception:
+        return {"category": "okay", "reason": f"parse error: {json_line[:80]}"}
+
+
+def classify_emails_batch(emails: list) -> list:
+    if not emails:
+        return []
+
+    student_results = DistilledEmailClassifier.classify_batch(emails)
+
+    final_results = [None] * len(emails)
+    llm_needed = []
+
+    for i, (email, student_result) in enumerate(zip(emails, student_results)):
+        if student_result is not None:
+            final_results[i] = {**email, **student_result, "error": None}
+        else:
+            llm_needed.append((i, email))
+
+    if llm_needed:
+        def _classify_one(idx_email):
+            idx, email = idx_email
+            try:
+                result = classify_with_llm(
+                    subject=email["subject"],
+                    sender=email["sender"],
+                    snippet=email["snippet"],
+                )
+                return idx, {**email, **result, "error": None}
+            except Exception as e:
+                return idx, {
+                    **email,
+                    "category": "okay",
+                    "reason": f"LLM fallback failed, marked okay: {str(e)[:50]}",
+                    "error": str(e),
+                }
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            for idx, result in executor.map(_classify_one, llm_needed):
+                final_results[idx] = result
+
+    return final_results

@@ -35,7 +35,6 @@ def setup_database():
 
     conn.commit()
     conn.close()
-    print("Database setup complete.")
 
 def insert_email_ids(email_ids: list):
     """
@@ -53,7 +52,6 @@ def insert_email_ids(email_ids: list):
     
     conn.commit()
     conn.close()
-    print(f"Inserted {len(email_ids)} email IDs.")
 
 def get_pending_emails(batch_size: int = 50) -> list:
     """
@@ -93,6 +91,38 @@ def mark_processed(email_id: str, category: str):
     
     conn.commit()
     conn.close()
+
+def mark_dry_run(email_id: str, category: str):
+    """Marks email as classified during dry run — not yet acted on."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE emails
+        SET status = 'dry_run',
+        category = ?,
+        processed_at = ?
+        WHERE id = ?
+    """, (category, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), email_id))
+    conn.commit()
+    conn.close()
+
+
+def reset_dry_run_emails() -> int:
+    """Resets dry_run emails back to pending for re-processing. Returns count."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE emails
+        SET status = 'pending',
+        category = NULL,
+        processed_at = NULL
+        WHERE status = 'dry_run'
+    """)
+    count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return count
+
 
 def mark_failed(email_id: str):
     """
@@ -161,7 +191,6 @@ def complete_first_run(history_id: str):
         "last_run": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
     save_state(state)
-    print(f"✅ First run state saved. historyId: {history_id}")
 
 
 def update_after_cron(history_id: str):
@@ -170,4 +199,3 @@ def update_after_cron(history_id: str):
     state["last_history_id"] = history_id
     state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M")
     save_state(state)
-    print(f"✅ Cron state saved. historyId updated: {history_id}")

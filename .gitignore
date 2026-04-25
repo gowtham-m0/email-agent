@@ -1,18 +1,93 @@
-# Python-generated files
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Credentials (NEVER commit)
+token.json
+credentials.json
+*.key
+*.pem
+
+# Database
+*.db
+agent_state.json
+inboxguard_config.json
+
+# Logs
+*.log
+inboxguard.log
+
+# Python
 __pycache__/
-*.py[oc]
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
 wheels/
-*.egg-info
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtual environments
+venv/
+ENV/
+env/
 .venv
-.claude/settings.local.json
 
-# secret files
-agent_state.json
-credentials.json
-.env
-token.json
-agent.db
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# PyInstaller
+dist/
+build/
+*.manifest
+*.spec
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Build
+*.whl
+
+# Temporary files
+*.tmp
+*.bak
+.tmp*/
+
+# Google Sheets cache
+*.gsheet
+
+# Training data
+distillation/training_data.jsonl
+
+# HTML reports
+reports/
+
+# User-specific prompt (generated via PROMPT_SETUP.md)
+prompts.py
+
+
+email-classifier-final/checkpoint-2932
+email-classifier-final/training_args.bin 
+email-classifier-final/training_meta.json   
