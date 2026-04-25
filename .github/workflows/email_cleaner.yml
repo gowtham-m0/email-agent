@@ -6,84 +6,82 @@ on:
   workflow_dispatch:
 
 jobs:
-clean-emails:
-runs-on: ubuntu-latest
-timeout-minutes: 30
+  clean-emails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
+    steps:
+      - name: Checkout code (with LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
 
-steps:
-  - name: Checkout code (with LFS)
-    uses: actions/checkout@v4
-    with:
-      lfs: true
+      - name: Pull LFS files
+        run: git lfs pull
 
-  - name: Pull LFS files
-    run: git lfs pull
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-  - name: Set up Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: '3.11'
-      cache: 'pip'
+      - name: Install uv
+        run: pip install uv
 
-  - name: Install uv
-    run: pip install uv
+      - name: Install dependencies
+        run: uv sync
 
-  - name: Install dependencies
-    run: uv sync
+      - name: Restore database cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            agent.db
+            agent_state.json
+          key: email-agent-state-${{ github.run_id }}
+          restore-keys: |
+            email-agent-state-
 
-  - name: Restore database cache
-    uses: actions/cache@v4
-    with:
-      path: |
-        agent.db
-        agent_state.json
-      key: email-agent-state-${{ github.run_id }}
-      restore-keys: |
-        email-agent-state-
+      - name: Create credentials.json
+        run: echo '${{ secrets.CREDENTIALS_JSON }}' > credentials.json
 
-  - name: Create credentials.json
-    run: echo '${{ secrets.CREDENTIALS_JSON }}' > credentials.json
+      - name: Create token.json
+        run: echo '${{ secrets.TOKEN_JSON }}' > token.json
 
-  - name: Create token.json
-    run: echo '${{ secrets.TOKEN_JSON }}' > token.json
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+          SHEET_ID=${{ secrets.SHEET_ID }}
+          EOF
 
-  - name: Create .env file
-    run: |
-      cat > .env << 'EOF'
-      GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
-      SHEET_ID=${{ secrets.SHEET_ID }}
-      EOF
+      - name: Create prompts.py
+        run: echo '${{ secrets.PROMPTS_PY }}' > prompts.py
 
-  - name: Create prompts.py
-    run: echo '${{ secrets.PROMPTS_PY }}' > prompts.py
+      - name: Run Email Cleaner
+        run: uv run main.py --full
+        timeout-minutes: 25
 
-  - name: Run Email Cleaner
-    run: uv run main.py --full
-    timeout-minutes: 25
+      - name: Save database cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            agent.db
+            agent_state.json
+          key: email-agent-state-${{ github.run_id }}
 
-  - name: Save database cache
-    uses: actions/cache/save@v4
-    if: always()
-    with:
-      path: |
-        agent.db
-        agent_state.json
-      key: email-agent-state-${{ github.run_id }}
+      - name: Update token secret if refreshed
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f token.json ]; then
+            NEW_TOKEN=$(cat token.json | base64 -w0)
+            gh secret set TOKEN_JSON --body "$NEW_TOKEN" 2>/dev/null || true
+          fi
 
-  - name: Update token secret if refreshed
-    if: always()
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    run: |
-      if [ -f token.json ]; then
-        NEW_TOKEN=$(cat token.json | base64 -w0)
-        gh secret set TOKEN_JSON --body "$NEW_TOKEN" 2>/dev/null || true
-      fi
-
-  - name: Notify on failure
-    if: failure()
-    run: |
-      echo "❌ Email cleaner failed"
-      echo "Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Email cleaner failed"
+          echo "Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
