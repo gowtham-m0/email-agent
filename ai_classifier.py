@@ -1,7 +1,11 @@
 import json
+import os
 import concurrent.futures
 from model import call_llm, DistilledEmailClassifier
-from prompts import CLASSIFICATION_PROMPT
+
+CLASSIFICATION_PROMPT = os.environ.get("CLASSIFICATION_PROMPT", "")
+if not CLASSIFICATION_PROMPT:
+    from prompts import CLASSIFICATION_PROMPT
 
 
 def classify_with_llm(subject: str, sender: str, snippet: str) -> dict:

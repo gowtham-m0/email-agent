@@ -54,12 +54,11 @@ jobs:
           SHEET_ID=${{ secrets.SHEET_ID }}
           EOF
 
-      - name: Create prompts.py
-        run: echo '${{ secrets.PROMPTS_PY }}' > prompts.py
-
       - name: Run Email Cleaner
         run: uv run main.py --full
         timeout-minutes: 25
+        env:
+          CLASSIFICATION_PROMPT: ${{ secrets.PROMPTS_PY }}
 
       - name: Save database cache
         uses: actions/cache/save@v4
