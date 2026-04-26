@@ -55,7 +55,7 @@ jobs:
           EOF
 
       - name: Run Email Cleaner
-        run: uv run main.py --full
+        run: uv run main.py --full -y
         timeout-minutes: 25
         env:
           CLASSIFICATION_PROMPT: ${{ secrets.PROMPTS_PY }}

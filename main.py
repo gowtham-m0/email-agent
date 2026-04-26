@@ -284,7 +284,7 @@ def run_pipeline(dry_run: bool):
     print(f"  {B}Processing Emails — {color}{mode}{X}")
     sep()
 
-    if not dry_run:
+    if not dry_run and "--yes" not in sys.argv and "-y" not in sys.argv:
         print(f"\n  {R}WARNING: This will move unwanted emails to Trash.{X}")
         print(f"  {R}Classification is AI-based and NOT 100% accurate.{X}")
         print(f"  {Y}Run a Dry Run first to review what would be deleted.{X}\n")
