@@ -93,6 +93,8 @@ Because this app can permanently delete emails, Google requires its own OAuth cr
 7. On the **Test users** page, click **Add Users** and add your Gmail address.
 8. Click **Save and Continue** → **Back to Dashboard**.
 
+> **Note:** Because the app stays in "Testing" mode and is not verified by Google, you will see a scary **"Google hasn't verified this app"** warning when you first sign in. This is normal for personal projects. Click **Advanced** → **Go to InboxGuard (unsafe)** to continue. This only appears once.
+
 ### 2d. Create OAuth credentials
 
 1. Go to **APIs & Services → Credentials**.
@@ -219,18 +221,6 @@ This script automatically:
 2. Syncs all Python dependencies.
 3. Launches the interactive menu.
 
-### Option D — Compiled executable (no Python required)
-
-```text
-dist/InboxGuard.exe
-```
-
-Keep these files **in the same folder** as the `.exe`:
-- `credentials.json`
-- `.env`
-- `token.json` (created on first run)
-- `email-classifier-final/` (the local AI model folder)
-
 ---
 
 ## Step 8 — Review the Google Sheets log
@@ -329,7 +319,7 @@ tail -f ~/inboxguard.log
 
 ### GitHub Actions — Fully automated in the cloud (no machine needed)
 
-The repo includes a pre-configured workflow at `.github/workflows/email_cleaner.yml` that runs every Sunday at midnight UTC. This lets InboxGuard run without your computer being on.
+The repo includes a pre-configured workflow at `.github/workflows/email_cleaner.yml` that runs every day at midnight UTC. This lets InboxGuard run without your computer being on.
 
 #### Setup steps
 
@@ -349,18 +339,19 @@ Go to your forked repo on GitHub → **Settings → Secrets and variables → Ac
 | `TOKEN_JSON` | Full contents of your `token.json` file | Open the file (created after first local run), copy everything |
 | `GROQ_API_KEY` | Your Groq API key | From [console.groq.com](https://console.groq.com/) |
 | `SHEET_ID` | Your Google Sheet ID | From the Sheets URL |
-| `PROMPTS_PY` | Full contents of your `prompts.py` file | Open the file, copy everything |
+| `PROMPTS_PY` | Just the prompt text (not the Python code) | Open `prompts.py`, copy only the text **inside** the triple quotes (`"""..."""`), not the `CLASSIFICATION_PROMPT =` part. If you haven't created `prompts.py` yet, see [Prompt Setup](#prompt-setup) below |
 
 **4. Change the schedule** (optional)
 
 Edit `.github/workflows/email_cleaner.yml` line 5:
 ```yaml
-- cron: '0 0 * * 0'   # Every Sunday midnight UTC
+- cron: '0 0 * * *'   # Every day at midnight UTC
 ```
 
 Cron format: `MINUTE HOUR DAY MONTH WEEKDAY`. Examples:
 - `0 8 * * 1` — Every Monday at 8:00 AM UTC
 - `0 6 * * *` — Every day at 6:00 AM UTC
+- `0 0 * * 0` — Every Sunday at midnight UTC
 - `0 0 1 * *` — First of every month at midnight UTC
 
 **5. Enable Actions** on your fork:
@@ -374,6 +365,24 @@ Go to **Actions → Email Cleaner Agent → Run workflow → Run workflow**.
 Watch the logs to confirm everything works.
 
 > ⚠️ GitHub Actions runs without a GPU, so the local DistilBERT model uses CPU — it is slower but works. The Groq fallback is fast regardless.
+
+---
+
+## Prompt Setup
+
+InboxGuard uses a personalized prompt to classify your emails. This prompt tells the AI what matters to you — your banks, your job, your subscriptions, etc.
+
+### How to create your prompt
+
+1. Open [claude.ai](https://claude.ai) (or any AI chatbot).
+2. Copy the full contents of `PROMPT_SETUP.md` from this repo and paste it as your first message.
+3. The AI will interview you about your email habits (one question at a time).
+4. At the end, it generates a `prompts.py` file tailored to you.
+5. Save that file as `prompts.py` in the project root (same folder as `main.py`).
+
+> `prompts.py` is already in `.gitignore` — your personal preferences stay private and are never committed.
+
+If you're setting up GitHub Actions, you'll need to copy just the **prompt text** (the part inside the triple quotes `"""..."""`, not the `CLASSIFICATION_PROMPT =` line) into the `PROMPTS_PY` secret.
 
 ---
 
@@ -432,7 +441,7 @@ Delete `token.json` and run `uv run main.py --setup` to re-authenticate.
 The workflow checks that you have not left dry-run mode on. Make sure `DRY_RUN` is not hardcoded to `True` in `main.py`.
 
 **Emails are being misclassified**
-Run a dry run first, review the Sheets log, and identify patterns. The model is not perfect — check the "Reason" column to understand why an email was classified a certain way.
+Run a dry run first, review the Google Sheets log, and identify patterns. The model is not perfect — check the "Reason" column in Google Sheets to understand why an email was classified a certain way.
 
 ---
 
