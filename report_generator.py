@@ -50,7 +50,6 @@ def _build_html(logs: list, mode: str, counts: dict, elapsed: float) -> str:
 
         sender = _escape(log.get("sender", ""))
         subject = _escape(log.get("subject", ""))
-        reason = _escape(log.get("reason", ""))
         action_display = _escape(action)
 
         rows_html += f"""
@@ -58,7 +57,6 @@ def _build_html(logs: list, mode: str, counts: dict, elapsed: float) -> str:
                         <td class="cell-sender" title="{sender}">{sender}</td>
                         <td class="cell-subject" title="{subject}">{subject}</td>
                         <td><span class="badge {badge_class}">{category}</span></td>
-                        <td class="cell-reason" title="{reason}">{reason}</td>
                         <td><span class="action {action_class}">{action_display}</span></td>
                     </tr>"""
 
@@ -165,7 +163,7 @@ def _build_html(logs: list, mode: str, counts: dict, elapsed: float) -> str:
         tbody tr:hover{{background:#1c2128}}
         tbody tr.hide{{display:none}}
         td{{padding:.6rem 1rem;font-size:.85rem}}
-        .cell-sender,.cell-reason{{
+        .cell-sender{{
             max-width:220px;overflow:hidden;
             text-overflow:ellipsis;white-space:nowrap;color:#8b949e;
         }}
@@ -173,7 +171,6 @@ def _build_html(logs: list, mode: str, counts: dict, elapsed: float) -> str:
             max-width:360px;overflow:hidden;
             text-overflow:ellipsis;white-space:nowrap;
         }}
-        .cell-reason{{font-size:.8rem}}
 
         /* badges */
         .badge{{
@@ -195,7 +192,7 @@ def _build_html(logs: list, mode: str, counts: dict, elapsed: float) -> str:
 
         @media(max-width:768px){{
             .wrap{{padding:1rem}}
-            .cell-sender,.cell-subject,.cell-reason{{max-width:140px}}
+            .cell-sender,.cell-subject{{max-width:140px}}
         }}
     </style>
 </head>
@@ -250,7 +247,6 @@ def _build_html(logs: list, mode: str, counts: dict, elapsed: float) -> str:
                         <th>Sender</th>
                         <th>Subject</th>
                         <th>Category</th>
-                        <th>Reason</th>
                         <th>Action</th>
                     </tr>
                 </thead>

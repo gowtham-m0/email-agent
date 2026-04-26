@@ -105,7 +105,7 @@ def _interactive():
 
 def pause():
     if _interactive():
-        pause()
+        input(f"\n  {B}Press Enter to continue...{X}")
 
 
 def ask(prompt, default=None):
