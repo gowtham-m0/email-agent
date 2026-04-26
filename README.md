@@ -30,6 +30,7 @@ Before you start, make sure you have the following installed:
 | **Python 3.11+** | Yes | [python.org/downloads](https://www.python.org/downloads/) |
 | **uv** (package manager) | Yes | Installed automatically by `InboxGuard.bat` on Windows, or see below |
 | **Git** | Yes (to clone) | [git-scm.com](https://git-scm.com/) |
+| **Git LFS** | Yes | Required to download the local AI model — [git-lfs.com](https://git-lfs.com/) |
 | **GPU (CUDA)** | No | Speeds up the local AI model; falls back to CPU automatically |
 
 ### Install `uv` manually (if not using the .bat file)
@@ -49,6 +50,32 @@ After installing, restart your terminal and verify:
 uv --version
 ```
 
+### Install Git LFS
+
+The local AI model (DistilBERT) is stored using Git LFS. **If you skip this step, the app will crash** when it tries to load the model.
+
+**Windows:** Download and run the installer from [git-lfs.com](https://git-lfs.com/), then open a new terminal and run:
+```bash
+git lfs install
+```
+
+**macOS:**
+```bash
+brew install git-lfs
+git lfs install
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt install git-lfs
+git lfs install
+```
+
+Verify it worked:
+```bash
+git lfs version
+```
+
 ---
 
 ## Step 1 — Clone the repository
@@ -57,6 +84,11 @@ uv --version
 git clone https://github.com/gowtham-m0/email-agent.git
 cd email-agent
 ```
+
+> If you already cloned the repo **before** installing Git LFS, the model files will be broken pointer files. Fix it by running:
+> ```bash
+> git lfs pull
+> ```
 
 ---
 
@@ -339,7 +371,7 @@ Go to your forked repo on GitHub → **Settings → Secrets and variables → Ac
 | `TOKEN_JSON` | Full contents of your `token.json` file | Open the file (created after first local run), copy everything |
 | `GROQ_API_KEY` | Your Groq API key | From [console.groq.com](https://console.groq.com/) |
 | `SHEET_ID` | Your Google Sheet ID | From the Sheets URL |
-| `PROMPTS_PY` | Just the prompt text (not the Python code) | Open `prompts.py`, copy only the text **inside** the triple quotes (`"""..."""`), not the `CLASSIFICATION_PROMPT =` part. If you haven't created `prompts.py` yet, see [Prompt Setup](#prompt-setup) below |
+| `PROMPTS_PY` | Full contents of your `prompts.py` file | Open `prompts.py`, select all, copy everything. If you haven't created it yet, see [Prompt Setup](#prompt-setup) below |
 
 **4. Change the schedule** (optional)
 
@@ -382,7 +414,7 @@ InboxGuard uses a personalized prompt to classify your emails. This prompt tells
 
 > `prompts.py` is already in `.gitignore` — your personal preferences stay private and are never committed.
 
-If you're setting up GitHub Actions, you'll need to copy just the **prompt text** (the part inside the triple quotes `"""..."""`, not the `CLASSIFICATION_PROMPT =` line) into the `PROMPTS_PY` secret.
+If you're setting up GitHub Actions, copy the **full contents of `prompts.py`** (the entire file) into the `PROMPTS_PY` secret.
 
 ---
 
@@ -402,9 +434,79 @@ If you're setting up GitHub Actions, you'll need to copy just the **prompt text*
 | `token.json` | Your Gmail auth token — auto-created on first run, **never commit** |
 | `.env` | Your environment variables — **never commit this** |
 | `agent.db` | SQLite database — auto-created, safe to delete to reset state |
-| `distillation/` | Scripts used to train the local AI model (not needed to run the app) |
+| `distillation/` | Scripts for retraining the local AI model — `label_with_qwen.py` (labels emails via Qwen2.5/Ollama), `export_training_data.py` (pulls labels from Sheets), `train_student.py` (fine-tunes DistilBERT). Not needed to run the app. |
 | `email-classifier-final/` | Trained local DistilBERT model weights |
 | `InboxGuard.bat` | Windows one-click launcher |
+
+---
+
+## How the local model was trained (optional reading)
+
+The local DistilBERT model (`email-classifier-final/`) was trained using **knowledge distillation** — a technique where a large, powerful AI teaches a small, fast one.
+
+**The teacher:** [Qwen2.5](https://ollama.com/library/qwen2.5), a large language model run locally via [Ollama](https://ollama.com/). It classifies emails with high accuracy but is too slow to run on thousands of emails in real time.
+
+**The student:** DistilBERT, a lightweight model that runs instantly — even on CPU. It was fine-tuned on labels produced by Qwen2.5.
+
+**The pipeline:**
+1. Qwen2.5 (via Ollama, running locally) classifies emails → labels saved to Google Sheets
+2. `distillation/export_training_data.py` pulls those labels from Sheets into a `.jsonl` training file
+3. `distillation/train_student.py` fine-tunes DistilBERT on that data
+4. The trained model is saved to `email-classifier-final/` and used for all future runs
+
+The result: a tiny model that classifies most emails in milliseconds, with Groq as a fallback only for the cases it's unsure about.
+
+> **You do not need to retrain anything to use InboxGuard.** The trained weights are already included. The section below is only for people who want to improve the model using their own labeled data.
+
+### Retraining the model (advanced, optional)
+
+If the model is misclassifying too many emails and you want to retrain it on your own inbox data:
+
+**Step 1 — Set up Ollama and Qwen2.5**
+
+1. Install Ollama from [ollama.com/download](https://ollama.com/download)
+2. Open a terminal and pull the model:
+   ```bash
+   ollama pull qwen2.5
+   ```
+3. Start Ollama (keep this terminal open):
+   ```bash
+   ollama serve
+   ```
+
+**Step 2 — Label emails with Qwen2.5**
+
+Run this from the project root:
+```bash
+uv run distillation/label_with_qwen.py
+```
+
+By default it samples 500 random emails from your inbox, classifies each one with Qwen2.5, and writes the labels to your Google Sheets. To sample more:
+```bash
+uv run distillation/label_with_qwen.py 1000
+```
+
+This may take a while — Qwen2.5 runs on your CPU/GPU locally, so speed depends on your machine.
+
+**Step 3 — Review the labels**
+
+Open your Google Sheets and scan through the labeled emails. Delete any rows where the classification looks obviously wrong. Quality matters more than quantity here.
+
+**Step 4 — Export the training data**
+
+```bash
+uv run distillation/export_training_data.py
+```
+
+This pulls the labeled rows from Sheets and saves them to `distillation/training_data.jsonl`.
+
+**Step 5 — Retrain DistilBERT**
+
+```bash
+uv run distillation/train_student.py
+```
+
+This fine-tunes DistilBERT on your labeled data and saves the new model to `email-classifier-final/`. The next time you run InboxGuard it will automatically use the updated model.
 
 ---
 
@@ -421,6 +523,9 @@ Full list of supported variables in `.env`:
 ---
 
 ## Troubleshooting
+
+**Model fails to load / `safetensors` error / model file is only a few bytes**
+You cloned without Git LFS. Install Git LFS (see Prerequisites), then run `git lfs pull` inside the project folder. The model files should now be several hundred MB, not a few hundred bytes.
 
 **`credentials.json not found`**
 Make sure you downloaded the file from Google Cloud Console (Step 2d) and placed it in the same folder as `main.py`.
