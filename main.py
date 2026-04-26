@@ -99,6 +99,15 @@ def info(msg):
     print(f"  {D}>{X} {msg}")
 
 
+def _interactive():
+    return sys.stdin.isatty()
+
+
+def pause():
+    if _interactive():
+        pause()
+
+
 def ask(prompt, default=None):
     suffix = f" [{default}]" if default else ""
     val = input(f"\n  {B}{prompt}{suffix}: {X}").strip()
@@ -212,7 +221,7 @@ def setup_wizard():
 
     print(f"\n  {G}Setup complete!{X}")
     print(f"  Run the pipeline with option 1 from the main menu.\n")
-    input(f"  {D}Press Enter to continue...{X}")
+    pause()
 
 
 def _update_env(key: str, value: str):
@@ -250,7 +259,7 @@ def show_stats():
 
     if total == 0:
         warn("No emails in database yet. Run the pipeline first.")
-        input(f"\n  {D}Press Enter to continue...{X}")
+        pause()
         return
 
     processed = stats.get("processed", 0)
@@ -272,7 +281,7 @@ def show_stats():
             print(f"  {status:12} {bar} {pct:5.1f}%  ({count})")
 
     print()
-    input(f"  {D}Press Enter to continue...{X}")
+    pause()
 
 
 # ── Pipeline ─────────────────────────────────────────────────────
@@ -290,7 +299,7 @@ def run_pipeline(dry_run: bool):
         print(f"  {Y}Run a Dry Run first to review what would be deleted.{X}\n")
         if not ask_yn("I understand the risks. Proceed?", default=False):
             warn("Cancelled.")
-            input(f"\n  {D}Press Enter to continue...{X}")
+            pause()
             return
         print()
 
@@ -301,7 +310,7 @@ def run_pipeline(dry_run: bool):
     except Exception as e:
         err(f"Gmail auth failed: {e}")
         err("Check credentials.json and run: uv run main.py --setup")
-        input(f"\n  {D}Press Enter to continue...{X}")
+        pause()
         return
 
     try:
@@ -310,7 +319,7 @@ def run_pipeline(dry_run: bool):
     except Exception as e:
         err(f"Google Sheets connection failed: {e}")
         err("Check SHEET_ID in .env")
-        input(f"\n  {D}Press Enter to continue...{X}")
+        pause()
         return
 
     state = load_state()
@@ -348,7 +357,7 @@ def run_pipeline(dry_run: bool):
             warn(f"Large batch ({len(all_ids)} emails). This may take a while.")
             if not ask_yn(f"Process all {len(all_ids)} emails?", default=True):
                 warn("Cancelled.")
-                input(f"\n  {D}Press Enter to continue...{X}")
+                pause()
                 return
         insert_email_ids(all_ids)
         session_count = len(all_ids)
@@ -368,7 +377,7 @@ def run_pipeline(dry_run: bool):
 
     if session_count == 0:
         ok("No new emails to process.")
-        input(f"\n  {D}Press Enter to continue...{X}")
+        pause()
         return
 
     session_counts, session_processed, all_logs, elapsed = _process_batches(
@@ -391,7 +400,7 @@ def run_pipeline(dry_run: bool):
     ok(f"Done! {session_processed}/{session_count} emails processed.")
     sep()
 
-    input(f"\n  {D}Press Enter to continue...{X}")
+    pause()
 
 
 def _clear_spam(service, dry_run: bool):
@@ -614,7 +623,7 @@ def main():
                 _clear_spam(service, dry_run=False)
             except Exception as e:
                 err(f"Failed: {e}")
-            input(f"\n  {D}Press Enter to continue...{X}")
+            pause()
         elif choice == "3":
             ok("See you next time!")
             break
