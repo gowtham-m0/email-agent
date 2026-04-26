@@ -6,7 +6,7 @@ REPORTS_DIR = "reports"
 
 
 def generate_report(logs: list, mode: str, counts: dict, elapsed: float) -> str:
-    folder = "dry_run" if mode == "dry_run" else "clean_wipe"
+    folder = "random_test" if mode == "random_test" else "clean_wipe"
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     report_dir = os.path.join(REPORTS_DIR, folder, timestamp)
     os.makedirs(report_dir, exist_ok=True)
@@ -45,6 +45,7 @@ def _build_html(logs: list, mode: str, counts: dict, elapsed: float) -> str:
             "KEPT": "action-kept",
             "DELETED": "action-deleted",
             "DRY_RUN": "action-dryrun",
+            "TEST": "action-dryrun",
             "DELETE_FAILED": "action-failed",
         }.get(action.split(":")[0], "")
 
@@ -60,8 +61,9 @@ def _build_html(logs: list, mode: str, counts: dict, elapsed: float) -> str:
                         <td><span class="action {action_class}">{action_display}</span></td>
                     </tr>"""
 
-    mode_display = "DRY RUN" if mode == "dry_run" else "CLEAN WIPE"
-    mode_class = "mode-dry" if mode == "dry_run" else "mode-wipe"
+    mode_labels = {"random_test": "RANDOM TEST", "clean_wipe": "CLEAN WIPE"}
+    mode_display = mode_labels.get(mode, mode.upper())
+    mode_class = "mode-dry" if mode == "random_test" else "mode-wipe"
     date_display = datetime.now().strftime("%B %d, %Y &middot; %I:%M %p")
     total = sum(counts.values())
 

@@ -130,13 +130,11 @@ def fetch_all_email_ids(service) -> list:
     return ids
 
 
-def fetch_random_sample(service, sample_size: int) -> list:
+def fetch_random_sample(service, sample_size: int) -> tuple[list, list]:
     import random
     all_ids = fetch_all_email_ids(service)
-    if sample_size >= len(all_ids):
-        return all_ids
     random.shuffle(all_ids)
-    return all_ids[:sample_size]
+    return all_ids[:sample_size], all_ids[sample_size:]
 
 
 def get_current_history_id(service) -> str:

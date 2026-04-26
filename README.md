@@ -2,7 +2,7 @@
 
 Automatically classifies every email in your Gmail inbox as **important / okay / unwanted**, logs decisions to Google Sheets, and optionally deletes unwanted mail. Runs on your machine or fully automated via GitHub Actions / system cron.
 
-> **⚠️ Disclaimer:** Classification is AI-based and **not 100% accurate** — important emails may occasionally be misclassified. **Always run with Dry Run first** and review the Google Sheets log before enabling deletion. The author is not responsible for any accidentally deleted emails. Use at your own risk.
+> **⚠️ Disclaimer:** Classification is AI-based and **not 100% accurate** — important emails may occasionally be misclassified. **Always run a Random Test first** and review the results before enabling deletion. The author is not responsible for any accidentally deleted emails. Use at your own risk.
 
 ---
 
@@ -231,14 +231,14 @@ uv run main.py
 ```
 
 You will see a menu:
-- **1 → Process emails → 1 (Dry Run)**: classifies everything, logs to Sheets, deletes nothing. **Always do this first.**
+- **1 → Process emails → 1 (Random Test)**: pick N random emails, classify them, and show results — no database or state changes. **Always do this first.**
 - **1 → Process emails → 2 (Clean Wipe)**: classifies and moves unwanted emails to Trash (recoverable within 30 days).
 - **2 → Clear spam folder**: empties the Gmail spam/junk folder.
 
 ### Option B — Command-line flags (for scripting / cron)
 
 ```bash
-uv run main.py --dry-run   # preview only, no deletions
+uv run main.py --dry-run   # random test: pick N emails, classify, no side effects
 uv run main.py --full      # classify and delete unwanted emails
 uv run main.py --stats     # show database statistics
 uv run main.py --setup     # re-run the setup wizard
@@ -542,11 +542,11 @@ Copy the URL printed in the terminal and paste it manually into your browser.
 **`token.json` expired**
 Delete `token.json` and run `uv run main.py --setup` to re-authenticate.
 
-**GitHub Actions: "DRY_RUN is still True"**
-The workflow checks that you have not left dry-run mode on. Make sure `DRY_RUN` is not hardcoded to `True` in `main.py`.
+**GitHub Actions: not processing emails**
+Make sure you are using the `--full` flag in the workflow. The `--dry-run` flag runs a Random Test (no deletions).
 
 **Emails are being misclassified**
-Run a dry run first, review the Google Sheets log, and identify patterns. The model is not perfect — check the "Reason" column in Google Sheets to understand why an email was classified a certain way.
+Run a Random Test first, review the report, and identify patterns. The model is not perfect — check the "Reason" column to understand why an email was classified a certain way.
 
 ---
 

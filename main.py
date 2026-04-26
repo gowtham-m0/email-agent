@@ -29,7 +29,6 @@ from db_manager import (
     insert_email_ids,
     get_pending_emails,
     mark_processed,
-    mark_dry_run,
     reset_dry_run_emails,
     mark_failed,
     get_stats,
@@ -139,7 +138,7 @@ def process_submenu():
     print(f"""
   {B}How do you want to process?{X}
   {C}───────────────────────────────{X}
-  {B}1{X}.  {Y}Dry Run{X}       (preview only — nothing deleted)
+  {B}1{X}.  {Y}Random Test{X}   (pick N random emails, classify, no side effects)
   {B}2{X}.  {R}Clean Wipe{X}    (classify and DELETE unwanted emails)
   {B}0{X}.  {D}Back{X}
 """)
@@ -284,19 +283,109 @@ def show_stats():
     pause()
 
 
+# ── Random Test (no state, no DB) ────────────────────────────────
+
+def run_random_test():
+    banner()
+    print(f"  {B}Random Test — {Y}NO SIDE EFFECTS{X}")
+    sep()
+    print(f"\n  {D}Fetches random emails, classifies them, shows results.{X}")
+    print(f"  {D}Does NOT touch agent_state or the database.{X}\n")
+
+    raw = ask("How many random emails to test?", "10")
+    try:
+        count = int(raw)
+        if count < 1:
+            raise ValueError
+    except ValueError:
+        err("Enter a valid positive number.")
+        pause()
+        return
+
+    try:
+        service = get_gmail_service()
+    except Exception as e:
+        err(f"Gmail auth failed: {e}")
+        pause()
+        return
+
+    info(f"Fetching {count} random email IDs from inbox...")
+    sampled_ids, extra_ids = fetch_random_sample(service, count)
+    if not sampled_ids:
+        warn("No emails found in inbox.")
+        pause()
+        return
+    ok(f"Got {len(sampled_ids)} emails")
+
+    info("Fetching metadata...")
+    emails = []
+    ids_to_fetch = sampled_ids
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        fetched, fetch_errors = fetch_emails_batch(service, ids_to_fetch)
+        emails.extend(fetched)
+        if len(emails) >= count or not fetch_errors or not extra_ids:
+            break
+        need = count - len(emails)
+        ids_to_fetch = extra_ids[:need]
+        extra_ids = extra_ids[need:]
+        if ids_to_fetch:
+            warn(f"{len(fetch_errors)} failed, retrying with {len(ids_to_fetch)} replacement(s)...")
+    emails = emails[:count]
+    if not emails:
+        err("No email metadata retrieved.")
+        pause()
+        return
+    ok(f"Fetched {len(emails)} emails")
+
+    info("Classifying...")
+    classified = classify_emails_batch(emails)
+
+    counts = {"important": 0, "okay": 0, "unwanted": 0, "failed": 0}
+    logs = []
+
+    for result in classified:
+        category = result.get("category", "okay")
+        error = result.get("error")
+
+        if error:
+            counts["failed"] += 1
+            continue
+
+        counts[category] = counts.get(category, 0) + 1
+        logs.append({
+            "date":     datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "sender":   result.get("sender", ""),
+            "subject":  result.get("subject", ""),
+            "category": category,
+            "reason":   result.get("reason", ""),
+            "action":   "TEST",
+        })
+
+    print(f"\n  {B}Results{X}")
+    sep()
+    print(f"    {G}Important:{X}  {counts['important']}")
+    print(f"    {C}Okay:{X}       {counts['okay']}")
+    print(f"    {Y}Unwanted:{X}   {counts['unwanted']}")
+    print(f"    {R}Failed:{X}     {counts['failed']}")
+
+    report_path = generate_report(logs, "random_test", counts, 0)
+    ok(f"Report saved: {report_path}")
+
+    pause()
+
+
 # ── Pipeline ─────────────────────────────────────────────────────
 
-def run_pipeline(dry_run: bool):
+def run_pipeline():
     banner()
-    mode = "DRY RUN" if dry_run else "CLEAN WIPE"
-    color = Y if dry_run else R
-    print(f"  {B}Processing Emails — {color}{mode}{X}")
+    print(f"  {B}Processing Emails — {R}CLEAN WIPE{X}")
     sep()
 
-    if not dry_run and "--yes" not in sys.argv and "-y" not in sys.argv:
+    if "--yes" not in sys.argv and "-y" not in sys.argv:
         print(f"\n  {R}WARNING: This will move unwanted emails to Trash.{X}")
         print(f"  {R}Classification is AI-based and NOT 100% accurate.{X}")
-        print(f"  {Y}Run a Dry Run first to review what would be deleted.{X}\n")
+        print(f"  {Y}Run a Random Test first to review classifications.{X}\n")
         if not ask_yn("I understand the risks. Proceed?", default=False):
             warn("Cancelled.")
             pause()
@@ -334,26 +423,12 @@ def run_pipeline(dry_run: bool):
         session_count = pending_count
     elif state["is_first_run"]:
         info("First run — clearing spam folder...")
-        _clear_spam(service, dry_run)
+        _clear_spam(service, dry_run=False)
         info("Fetching inbox email IDs...")
-
-        if dry_run:
-            sample_size = ask("Sample size for preview (e.g., 100, 500, or 'all')", "100")
-            if sample_size.lower() == "all":
-                all_ids = fetch_all_email_ids(service)
-            else:
-                try:
-                    size = int(sample_size)
-                    all_ids = fetch_random_sample(service, size)
-                    ok(f"Fetched random sample of {len(all_ids)} emails")
-                except ValueError:
-                    warn("Invalid input. Using default 100.")
-                    all_ids = fetch_random_sample(service, 100)
-        else:
-            all_ids = fetch_all_email_ids(service)
+        all_ids = fetch_all_email_ids(service)
 
         ok(f"Found {len(all_ids)} emails to process")
-        if len(all_ids) > 500 and not dry_run:
+        if len(all_ids) > 500:
             warn(f"Large batch ({len(all_ids)} emails). This may take a while.")
             if not ask_yn(f"Process all {len(all_ids)} emails?", default=True):
                 warn("Cancelled.")
@@ -369,11 +444,10 @@ def run_pipeline(dry_run: bool):
             insert_email_ids(new_ids)
         session_count = len(new_ids) if new_ids else 0
 
-    if not dry_run:
-        dry_run_count = reset_dry_run_emails()
-        if dry_run_count > 0:
-            info(f"Re-queuing {dry_run_count} emails from previous dry run")
-            session_count += dry_run_count
+    dry_run_count = reset_dry_run_emails()
+    if dry_run_count > 0:
+        info(f"Re-queuing {dry_run_count} emails from previous dry run")
+        session_count += dry_run_count
 
     if session_count == 0:
         ok("No new emails to process.")
@@ -381,18 +455,16 @@ def run_pipeline(dry_run: bool):
         return
 
     session_counts, session_processed, all_logs, elapsed = _process_batches(
-        service, sheets, dry_run, session_count
+        service, sheets, session_count
     )
 
-    if not dry_run:
-        history_id = get_current_history_id(service)
-        if state["is_first_run"]:
-            complete_first_run(history_id)
-        else:
-            update_after_cron(history_id)
+    history_id = get_current_history_id(service)
+    if state["is_first_run"]:
+        complete_first_run(history_id)
+    else:
+        update_after_cron(history_id)
 
-    mode = "dry_run" if dry_run else "clean_wipe"
-    report_path = generate_report(all_logs, mode, session_counts, elapsed)
+    report_path = generate_report(all_logs, "clean_wipe", session_counts, elapsed)
     ok(f"Report saved: {report_path}")
 
     print()
@@ -449,7 +521,7 @@ def _live_status(counts, processed, total, elapsed, stage=""):
     sys.stdout.flush()
 
 
-def _process_batches(service, sheets, dry_run: bool, session_total: int = 0):
+def _process_batches(service, sheets, session_total: int = 0):
     if session_total == 0:
         stats = get_stats()
         session_total = stats.get("pending", 0)
@@ -507,7 +579,7 @@ def _process_batches(service, sheets, dry_run: bool, session_total: int = 0):
                              time.time() - global_start)
                 continue
 
-            if category == "unwanted" and not dry_run:
+            if category == "unwanted":
                 emails_to_trash.append(email_id)
 
             pending_results.append(result)
@@ -525,10 +597,7 @@ def _process_batches(service, sheets, dry_run: bool, session_total: int = 0):
             reason   = result.get("reason", "")
 
             if category == "unwanted":
-                if dry_run:
-                    action = "DRY_RUN"
-                    mark_dry_run(email_id, category)
-                elif email_id in failed_deletes:
+                if email_id in failed_deletes:
                     action = "DELETE_FAILED"
                     mark_failed(email_id)
                     global_counts["failed"] += 1
@@ -560,12 +629,12 @@ def _process_batches(service, sheets, dry_run: bool, session_total: int = 0):
             _live_status(global_counts, global_processed, session_total,
                          time.time() - global_start)
 
-        if emails_to_mark_read and not dry_run:
+        if emails_to_mark_read:
             _live_status(global_counts, global_processed, session_total,
                          time.time() - global_start, "marking as read")
             mark_emails_as_read_batch(service, emails_to_mark_read)
 
-        if logs and not dry_run:
+        if logs:
             _live_status(global_counts, global_processed, session_total,
                          time.time() - global_start, "logging to sheets")
             log_emails_batch(sheets, logs)
@@ -595,10 +664,10 @@ def main():
     _enable_ansi()
 
     if "--dry-run" in sys.argv:
-        run_pipeline(dry_run=True)
+        run_random_test()
         return
     if "--full" in sys.argv:
-        run_pipeline(dry_run=False)
+        run_pipeline()
         return
     if "--setup" in sys.argv:
         setup_wizard()
@@ -614,9 +683,9 @@ def main():
         if choice == "1":
             sub = process_submenu()
             if sub == "1":
-                run_pipeline(dry_run=True)
+                run_random_test()
             elif sub == "2":
-                run_pipeline(dry_run=False)
+                run_pipeline()
         elif choice == "2":
             try:
                 service = get_gmail_service()

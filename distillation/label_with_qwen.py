@@ -201,7 +201,7 @@ def main():
 
     print(f"  Fetching {sample_size} random email IDs...")
     try:
-        email_ids = fetch_random_sample(service, sample_size)
+        email_ids, _ = fetch_random_sample(service, sample_size)
     except Exception as e:
         print(f"\n  ❌  Failed to fetch emails from Gmail: {e}\n"
               "      Check your internet connection and try again.\n")

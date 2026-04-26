@@ -3,9 +3,18 @@ import os
 import concurrent.futures
 from model import call_llm, DistilledEmailClassifier
 
-CLASSIFICATION_PROMPT = os.environ.get("CLASSIFICATION_PROMPT", "")
-if not CLASSIFICATION_PROMPT:
-    from prompts import CLASSIFICATION_PROMPT
+def _get_classification_prompt():
+    prompt = os.environ.get("CLASSIFICATION_PROMPT", "")
+    if not prompt:
+        try:
+            from prompts import CLASSIFICATION_PROMPT
+            prompt = CLASSIFICATION_PROMPT
+        except ImportError:
+            raise RuntimeError(
+                "prompts.py not found and CLASSIFICATION_PROMPT env var is not set.\n"
+                "Run 'python createprompt.py' to generate your personalized prompt."
+            )
+    return prompt
 
 
 def classify_with_llm(subject: str, sender: str, snippet: str) -> dict:
@@ -14,7 +23,7 @@ def classify_with_llm(subject: str, sender: str, snippet: str) -> dict:
     snippet = (snippet or "").strip()
 
     full_prompt = (
-        CLASSIFICATION_PROMPT
+        _get_classification_prompt()
         + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         + "NOW CLASSIFY THIS EMAIL:\n"
         + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
