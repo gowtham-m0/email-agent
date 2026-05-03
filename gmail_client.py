@@ -1,9 +1,34 @@
 import os
+import sys
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 from config import SCOPES
+
+C = "\033[96m"
+G = "\033[92m"
+Y = "\033[93m"
+R = "\033[91m"
+B = "\033[1m"
+D = "\033[2m"
+X = "\033[0m"
+
+
+def _run_oauth_flow():
+    print("  ┌─────────────────────────────────────────────────────┐")
+    print("  │  🔐  Google Sign-In will open in your browser.      │")
+    print("  │                                                     │")
+    print("  │  ⚠  IMPORTANT: Grant ALL permissions when asked.   │")
+    print("  │     • Gmail (read, send, delete)                    │")
+    print("  │     • Google Sheets                                 │")
+    print("  │     • Google Drive                                  │")
+    print("  │                                                     │")
+    print("  │  If you skip any, you will see auth errors later.   │")
+    print("  └─────────────────────────────────────────────────────┘\n")
+    flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+    return flow.run_local_server(port=0)
 
 
 def get_gmail_service():
@@ -19,22 +44,23 @@ def get_gmail_service():
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except RefreshError:
+                print(f"\n  {R}✗  Auth token expired or revoked.{X}")
+                print(f"  {D}Your saved login session is no longer valid.{X}\n")
+                choice = input(f"  {B}Re-authenticate now?{X}  {D}[1] Yes   [any] Exit:{X}  ").strip()
+                if choice == "1":
+                    os.remove('token.json')
+                    creds = _run_oauth_flow()
+                    with open('token.json', 'w') as token:
+                        token.write(creds.to_json())
+                    return build("gmail", "v1", credentials=creds)
+                else:
+                    print(f"\n  {D}Exiting. Run again when ready to re-authenticate.{X}\n")
+                    sys.exit(0)
         else:
-            print("  ┌─────────────────────────────────────────────────────┐")
-            print("  │  🔐  Google Sign-In will open in your browser.      │")
-            print("  │                                                     │")
-            print("  │  ⚠  IMPORTANT: Grant ALL permissions when asked.   │")
-            print("  │     • Gmail (read, send, delete)                    │")
-            print("  │     • Google Sheets                                 │")
-            print("  │     • Google Drive                                  │")
-            print("  │                                                     │")
-            print("  │  If you skip any, you will see auth errors later.   │")
-            print("  └─────────────────────────────────────────────────────┘\n")
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES
-            )
-            creds = flow.run_local_server(port=0)
+            creds = _run_oauth_flow()
 
         with open('token.json', 'w') as token:
             token.write(creds.to_json())

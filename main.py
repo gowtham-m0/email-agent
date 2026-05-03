@@ -430,10 +430,11 @@ def run_pipeline():
         ok(f"Found {len(all_ids)} emails to process")
         if len(all_ids) > 500:
             warn(f"Large batch ({len(all_ids)} emails). This may take a while.")
-            if not ask_yn(f"Process all {len(all_ids)} emails?", default=True):
-                warn("Cancelled.")
-                pause()
-                return
+            if "--yes" not in sys.argv and "-y" not in sys.argv:
+                if not ask_yn(f"Process all {len(all_ids)} emails?", default=True):
+                    warn("Cancelled.")
+                    pause()
+                    return
         insert_email_ids(all_ids)
         session_count = len(all_ids)
     else:
