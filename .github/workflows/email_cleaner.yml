@@ -42,10 +42,14 @@ jobs:
             email-agent-state-
 
       - name: Create credentials.json
-        run: echo '${{ secrets.CREDENTIALS_JSON }}' > credentials.json
+        env:
+          CREDENTIALS_JSON: ${{ secrets.CREDENTIALS_JSON }}
+        run: printf '%s' "$CREDENTIALS_JSON" > credentials.json
 
       - name: Create token.json
-        run: echo '${{ secrets.TOKEN_JSON }}' > token.json
+        env:
+          TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+        run: printf '%s' "$TOKEN_JSON" > token.json
 
       - name: Create .env file
         run: |
@@ -78,8 +82,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f token.json ]; then
-            NEW_TOKEN=$(cat token.json | base64 -w0)
-            gh secret set TOKEN_JSON --body "$NEW_TOKEN" 2>/dev/null || true
+            gh secret set TOKEN_JSON < token.json 2>/dev/null || true
           fi
 
       - name: Notify on failure

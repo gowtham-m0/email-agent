@@ -1,11 +1,5 @@
-import os
-import sys
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
-from config import SCOPES
+from auth_helpers import get_google_credentials, run_oauth_flow
 
 C = "\033[96m"
 G = "\033[92m"
@@ -27,46 +21,12 @@ def _run_oauth_flow():
     print("  │                                                     │")
     print("  │  If you skip any, you will see auth errors later.   │")
     print("  └─────────────────────────────────────────────────────┘\n")
-    flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-    return flow.run_local_server(port=0)
+    return run_oauth_flow()
 
 
 def get_gmail_service():
-    creds = None
-
-    if os.path.exists('token.json'):
-        try:
-            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-        except Exception:
-            print("\n  ⚠  Stored token has wrong permissions. Re-authenticating...\n")
-            os.remove('token.json')
-            creds = None
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except RefreshError:
-                print(f"\n  {R}✗  Auth token expired or revoked.{X}")
-                print(f"  {D}Your saved login session is no longer valid.{X}\n")
-                choice = input(f"  {B}Re-authenticate now?{X}  {D}[1] Yes   [any] Exit:{X}  ").strip()
-                if choice == "1":
-                    os.remove('token.json')
-                    creds = _run_oauth_flow()
-                    with open('token.json', 'w') as token:
-                        token.write(creds.to_json())
-                    return build("gmail", "v1", credentials=creds)
-                else:
-                    print(f"\n  {D}Exiting. Run again when ready to re-authenticate.{X}\n")
-                    sys.exit(0)
-        else:
-            creds = _run_oauth_flow()
-
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-
+    creds = get_google_credentials()
     return build("gmail", "v1", credentials=creds)
-
 
 def fetch_emails_batch(service, email_ids: list) -> tuple[list, list]:
     results = []

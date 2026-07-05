@@ -1,9 +1,8 @@
 import os 
 import gspread
-from google.oauth2.credentials import Credentials
 from datetime import datetime
-from config import SCOPES
 from dotenv import load_dotenv
+from auth_helpers import get_google_credentials
 
 load_dotenv()
 
@@ -17,7 +16,7 @@ def get_sheet():
         print("    Add it to your .env file:  SHEET_ID=your_google_sheet_id")
         print("    (It's the long ID in your Google Sheets URL)\n")
         raise SystemExit(1)
-    creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    creds = get_google_credentials()
     client = gspread.Client(auth=creds)
     workbook = client.open_by_key(sheet_id)
     return {

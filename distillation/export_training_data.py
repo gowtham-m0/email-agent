@@ -3,15 +3,14 @@ sys.stdout.reconfigure(encoding='utf-8')
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import gspread
-from google.oauth2.credentials import Credentials
 from dotenv import load_dotenv
-from config import SCOPES
+from auth_helpers import get_google_credentials
 
 load_dotenv()
 
 def export():
     token_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "token.json")
-    creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+    creds = get_google_credentials(token_path)
     client = gspread.authorize(creds)
     workbook = client.open_by_key(os.getenv("SHEET_ID"))
 
